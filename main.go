@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"time"
 )
 
 type Weather struct {
@@ -13,9 +15,10 @@ type Weather struct {
 		Country string `json:"country"`
 	} `json:"location"`
 	Current struct {
-		TempC      float64 `json:"temp_c"`
-		FeelsLikeC float64 `json:"feelslike_c"`
-		Condition  struct {
+		LastUpdatedEpoch int64   `json:"last_updated_epoch"`
+		TempC            float64 `json:"temp_c"`
+		FeelsLikeC       float64 `json:"feelslike_c"`
+		Condition        struct {
 			Text string `json:"text"`
 		}
 	} `json:"current"`
@@ -51,7 +54,7 @@ func main() {
 	q := "Bytom"
 
 	if len(os.Args) > 2 {
-		q = os.Args[4]
+		q = os.Args[1]
 	}
 
 	url := "https://api.weatherapi.com/v1/forecast.json?key=" + a + "&q=" + q + "&days=1&alerts=yes"
@@ -73,5 +76,51 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%s\n", string(body))
+
+	var weather Weather
+	err = json.Unmarshal(body, &weather)
+	if err != nil {
+		panic(err)
+	}
+
+	location, current, forecast := weather.Location, weather.Current, weather.Forecast.Forecastday[0]
+
+	fmt.Printf(
+		"\n🏙️  %s, %s, ♨️  %.0f°C ❄️  %.0f°C 🌥️  %.0f°C 🗨️  %s\n",
+		location.Country,
+		location.Name,
+		forecast.MaxTempC,
+		forecast.MinTempC,
+		forecast.AvgTempC,
+		forecast.Condition.Text,
+	)
+
+	lastUpdated := time.Unix(current.LastUpdatedEpoch, 0)
+
+	fmt.Printf(
+		"⌚  Last updated: %s\n",
+		lastUpdated.Format("15:04"),
+	)
+
+	fmt.Printf(
+		"current:  🌡️  %.0f°C, 🤯  %.0f°C, 🗨️  %s\n",
+		current.TempC,
+		current.FeelsLikeC,
+		current.Condition.Text,
+	)
+
+	for _, hour := range forecast.Hour {
+		date := time.Unix(hour.TimeEpoch, 0)
+		formatted := date.Format("15:04")
+		if date.Before(time.Now()) {
+			continue
+		}
+		fmt.Printf(
+			"⌚  %s  ➡️  🌡️  %.0f°C, 🌧️  %d%%, 🌨️  %d%%\n",
+			formatted,
+			hour.TempC,
+			hour.ChanceOfRain,
+			hour.ChanceOfSnow,
+		)
+	}
 }
